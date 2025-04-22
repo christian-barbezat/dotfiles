@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+
+# ☦ Psalter Daily — Display today's Kathisma from the LXX ☦
+
+KATHISMATA=(
+  "1 8" "9 16" "17 23" "24 31" "32 36"
+  "37 45" "46 54" "55 63" "64 69" "70 76"
+  "77 84" "85 90" "91 100" "101 104" "105 108"
+  "109 117" "118 118" "119 133" "134 142" "143 151"
+)
+
+# --- Determine days since the Orthodox New Year (Indiction)
+indiction_month=9
+indiction_day=27  # Julian Sep 14 ≈ Gregorian Sep 27
+
+today=$(date +%s)
+this_year=$(date +%Y)
+indiction_date=$(date -d "$this_year-$indiction_month-$indiction_day" +%s)
+
+if [[ $today -lt $indiction_date ]]; then
+  indiction_date=$(date -d "$((this_year - 1))-$indiction_month-$indiction_day" +%s)
+fi
+
+days_since=$(( (today - indiction_date) / 86400 ))
+kathisma_index=$(( days_since % 20 ))
+read START END <<< "${KATHISMATA[$kathisma_index]}"
+
+# --- Ellopos Base URL
+base_url="https://www.ellopos.net/elpenor/greek-texts/septuagint/chapter.asp?book=24&page="
+
+echo
+echo "☦☦☦  KATHISMA $((kathisma_index + 1)) — PSALMS $START to $END  ☦☦☦"
+echo
+
+for ((psalm=START; psalm<=END; psalm++)); do
+  url="${base_url}${psalm}"
+  echo "☦ Psalm $psalm ☦"
+  curl -s "$url" \
+    | awk '/<td width="50%" valign="top">/,/<\/td>/' \
+    | sed -n '/^[0-9]/p' \
+    | sed 's/<[^>]*>//g' \
+    | sed 's/^/  /'
+  echo
+done

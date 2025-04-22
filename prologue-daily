@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+
+# Create temp dir
+temp_dir=$(mktemp -d)
+
+# Today's date (e.g., "Sunday, April 20, 2025")
+today_pretty=$(date +"%A, %B %d, %Y")
+
+# Fetch Prologue HTML
+curl -s "https://www.ohrid-prolog.com/?lang=en" -o "$temp_dir/prologue_raw.html"
+
+# Format and extract with embedded Python
+/usr/bin/python3 - "$temp_dir/prologue_raw.html" "$today_pretty" <<'EOF' > "$temp_dir/prologue.txt"
+import sys
+from bs4 import BeautifulSoup
+import re
+
+html_path = sys.argv[1]
+pretty_date = sys.argv[2]
+
+with open(html_path, "r") as f:
+    soup = BeautifulSoup(f, "html.parser")
+
+output = []
+output.append("☦ PROLOGUE OF OHRID ☦")
+output.append(pretty_date)
+output.append("──────────────────────────────────────────────\n")
+
+def clean(text):
+    return re.sub(r'\s+', ' ', text.strip())
+
+def cap_first_letter(text):
+    return text[0].upper() + text[1:] if len(text) > 1 else text.upper()
+
+def format_header(text):
+    return f"\n☦ {text.upper().strip()} ☦\n"
+
+def split_title_and_body(text):
+    tokens = text.strip().split()
+    if not tokens or not re.match(r"^\d+\.$", tokens[0]):
+        return None, None
+
+    number = tokens.pop(0)
+    title_tokens = []
+    body_tokens = []
+
+    cue_words = {
+        "AND", "OF", "THE", "HOLY", "SAINT", "MARTYR", "CONFESSOR", "HIEROMARTYR",
+        "BISHOP", "POPE", "MONK", "NUN", "PRIEST", "READER", "DEACON", "ABBOT", "ARCHBISHOP"
+    }
+    name_like = lambda w: w.isupper() or w.strip(",").isupper()
+
+    while tokens:
+        word = tokens.pop(0)
+        if name_like(word) or word.upper() in cue_words or word.endswith(","):
+            title_tokens.append(word)
+        else:
+            body_tokens = [word] + tokens
+            break
+
+    title = " ".join(title_tokens).rstrip(",")
+    body = " ".join(body_tokens)
+    return f"{number} {title}", body
+
+# Sections where we don't want ☦ parsing (like numbered contemplations)
+non_saint_sections = {"HYMN OF PRAISE", "REFLECTION", "CONTEMPLATION", "HOMILY"}
+current_section = ""
+
+main = soup.find("div", class_="post-preview")
+
+for elem in main.find_all(["h2", "p"], recursive=False):
+    if elem.name == "h2":
+        title = clean(elem.get_text())
+        if title:
+            current_section = title.upper()
+            output.append(format_header(title))
+    elif elem.name == "p":
+        parts = str(elem).split("<br />")
+        for part in parts:
+            text = BeautifulSoup(part, "html.parser").get_text()
+            text = clean(text)
+            if not text:
+                continue
+
+            # Fix smashed words like ROMEA
+            text = re.sub(r"([A-Z]{2,})(?=[A-Z][a-z])", r"\1 ", text)
+
+            # Split on potential saint chunks (still needs vetting)
+            chunks = re.split(r"(?=\n?\d+\.\s+[A-Z])", text)
+            for chunk in chunks:
+                chunk = chunk.strip()
+                if not chunk:
+                    continue
+
+                if current_section not in non_saint_sections:
+                    title_line, body_line = split_title_and_body(chunk)
+                    if title_line:
+                        output.append(f"\n☦ {title_line} ☦\n")
+                        if body_line:
+                            output.append(cap_first_letter(body_line) + "\n")
+                        continue  # skip normal output fallback
+
+                # If in non-saint section or no valid saint header
+                output.append(cap_first_letter(chunk) + "\n")
+
+print("\n".join(output))
+EOF
+
+# View the result with wrapped lines (no truncation)
+less -R "$temp_dir/prologue.txt"
+
+# Clean up temp dir after viewing
+rm -rf "$temp_dir"

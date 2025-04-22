@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+set -e
+
+temp_dir=$(mktemp -d)
+trap "rm -rf $temp_dir" EXIT
+
+today_pretty=$(date +"%A, %B %d, %Y")
+curl -s -A "Mozilla/5.0" "https://orthocal.info/" -o "$temp_dir/orthocal.html"
+
+echo "☦ SCRIPTURE READINGS FOR TODAY ☦"
+echo "$today_pretty"
+echo "──────────────────────────────────────────────"
+echo
+
+# Extract reading sections from <section class="readings">
+awk '/<section class="readings">/,/<\/section>/' "$temp_dir/orthocal.html" \
+  | sed -e 's/<[^>]*>//g' -e 's/&nbsp;/ /g' -e '/^\s*$/d' \
+  | grep -E '^[0-9]|Epistle|Gospel|Vespers|Matins|Reading|KJV|Then|And' \
+  | sed 's/^[ \t]*//;s/[ \t]*$//' \
+  | awk '
+    /Gospel|Epistle|Reading/ { print "\n☦ " $0 " ☦"; next }
+    { print "  " $0 }
+  '

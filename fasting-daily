@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+
+# Orthodox three-bar cross symbol
+cross="☦"
+line_separator="------------------------------------------------------------"
+
+echo "$cross ORTHODOX FASTING CALENDAR $cross"
+echo "$line_separator"
+
+# Get today's Gregorian date, weekday, and year
+gregorian_date=$(date +%Y-%m-%d)
+weekday=$(date +%A)
+year=$(date +%Y)
+
+# Display Gregorian date (for clarity)
+echo "Date: $(date +%A,\ %B\ %d,\ %Y)"
+
+# Use Julian calendar date directly for calculation (Old Calendar)
+julian_date=$(date -d "$gregorian_date -13 days" +%Y-%m-%d)
+
+# Calculate Orthodox Pascha in Julian calendar and convert to Gregorian
+get_pascha_julian() {
+  local y=$1
+  local a=$((y % 4))
+  local b=$((y % 7))
+  local c=$((y % 19))
+  local d=$(((19 * c + 15) % 30))
+  local e=$(((2 * a + 4 * b - d + 34) % 7))
+  local month=$(((d + e + 114) / 31))
+  local day=$((((d + e + 114) % 31) + 1))
+  julian_pascha=$(date -d "$y-$(printf %02d $month)-$(printf %02d $day)" +%Y-%m-%d)
+  echo "$julian_pascha"
+}
+
+pascha_julian=$(get_pascha_julian "$year")
+
+# Helper function to compare dates
+date_between() {
+  [[ "$1" > "$2" && "$1" < "$3" ]]
+}
+
+# Bright Week (Julian Pascha through Bright Saturday)
+bright_week_start="$pascha_julian"
+bright_week_end=$(date -d "$bright_week_start +6 days" +%Y-%m-%d)
+
+# Check if today is Bright Week using Julian dates
+in_bright_week=false
+if [[ "$julian_date" == "$bright_week_start" ]]; then
+  in_bright_week=true
+elif [[ "$julian_date" > "$bright_week_start" ]]; then
+  next_day_after_end=$(date -d "$bright_week_end +1 day" +%Y-%m-%d)
+  if [[ "$julian_date" < "$next_day_after_end" ]]; then
+    in_bright_week=true
+  fi
+fi
+
+if [[ "$in_bright_week" == true ]]; then
+  fasting="No"
+  fast_name="Bright Week"
+  permissible="All foods are permitted. No fasting is kept during Bright Week."
+  daily_message="$cross Bright Week: No fasting is kept. Christ is Risen! $cross"
+
+  echo "$line_separator"
+  echo "Fasting Today: $fasting"
+  echo "Fast: $fast_name"
+  echo "Permissible Foods: $permissible"
+  echo "$line_separator"
+  echo "$daily_message"
+  exit 0
+fi
+
+# Fixed feast and fast dates
+nativity_day="$year-12-25"
+theophany_day="$year-01-06"
+theophany_eve="$year-01-05"
+
+# Fasting periods (Julian calendar)
+great_lent_start=$(date -d "$pascha_julian -48 days" +%Y-%m-%d)
+great_lent_end=$(date -d "$pascha_julian -1 day" +%Y-%m-%d)
+apostles_fast_end=$(date -d "$pascha_julian +49 days" +%Y-%m-%d)
+apostles_fast_start=$(date -d "$year-06-29" +%Y-%m-%d)
+dormition_fast_start="$year-08-01"
+dormition_fast_end="$year-08-14"
+nativity_fast_start="$year-11-15"
+nativity_fast_end="$year-12-24"
+
+# Default values
+fasting="No"
+fast_name="None"
+permissible="All foods are permitted."
+
+# Check other feasts and fasts
+if [[ "$julian_date" == "$nativity_day" || "$julian_date" == "$theophany_day" ]]; then
+  fasting="No"
+  fast_name="Feast of the Lord"
+  permissible="All foods are permitted. No fasting on this feast."
+  daily_message="$cross Feast of the Lord: No fasting is observed. Rejoice! $cross"
+elif [[ "$julian_date" == "$theophany_eve" ]]; then
+  fasting="Yes"
+  fast_name="Eve of Theophany"
+  permissible="Strict fast: no meat, dairy, fish, wine, or oil."
+  daily_message="$cross Theophany Eve: Strict fast. No meat, dairy, fish, wine, or oil. $cross"
+elif date_between "$julian_date" "$great_lent_start" "$great_lent_end"; then
+  fasting="Yes"
+  fast_name="Great Lent"
+  if [[ "$weekday" == "Saturday" || "$weekday" == "Sunday" ]]; then
+    permissible="No meat, dairy, fish. Wine and oil are permitted today."
+    daily_message="$cross Great Lent: Wine and oil permitted. $cross"
+  else
+    permissible="No meat, dairy, fish, wine, or oil."
+    daily_message="$cross Great Lent: Strict fasting. $cross"
+  fi
+elif date_between "$julian_date" "$apostles_fast_start" "$apostles_fast_end"; then
+  fasting="Yes"
+  fast_name="Apostles' Fast"
+  permissible="No meat or dairy. Fish, wine, and oil permitted some days."
+  daily_message="$cross Apostles' Fast: Moderate fasting. $cross"
+elif date_between "$julian_date" "$dormition_fast_start" "$dormition_fast_end"; then
+  fasting="Yes"
+  fast_name="Dormition Fast"
+  if [[ "$weekday" == "Saturday" || "$weekday" == "Sunday" ]]; then
+    permissible="No meat, dairy, fish. Wine and oil are permitted today."
+    daily_message="$cross Dormition Fast: Wine and oil permitted. $cross"
+  else
+    permissible="No meat, dairy, fish, wine, or oil."
+    daily_message="$cross Dormition Fast: Strict fasting. $cross"
+  fi
+elif date_between "$julian_date" "$nativity_fast_start" "$nativity_fast_end"; then
+  fasting="Yes"
+  fast_name="Nativity Fast"
+  permissible="No meat or dairy. Fish, wine, and oil permitted on some days."
+  daily_message="$cross Nativity Fast: Moderate fasting. $cross"
+elif [[ "$weekday" == "Wednesday" || "$weekday" == "Friday" ]]; then
+  fasting="Yes"
+  fast_name="Weekly Fast"
+  permissible="No meat, dairy, fish, wine, or oil."
+  daily_message="$cross $weekday Fast: Usual weekly fasting. $cross"
+else
+  daily_message="$cross No fasting is observed today. All foods are permitted. $cross"
+fi
+
+# Output
+echo "$line_separator"
+echo "Fasting Today: $fasting"
+echo "Fast: $fast_name"
+echo "Permissible Foods: $permissible"
+echo "$line_separator"
+echo "$daily_message"
